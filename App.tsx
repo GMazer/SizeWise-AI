@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Ruler, Weight, User, CheckCircle2, Loader2, Sparkles, Shirt, ArrowRightLeft, Eraser, Moon, Sun } from 'lucide-react';
 import { InputField } from './components/InputField';
@@ -254,22 +255,42 @@ const App: React.FC = () => {
 
                     <div className="text-center mb-8">
                       {prediction.isAmbiguous ? (
-                        <div className="bg-orange-50/80 dark:bg-orange-900/20 p-5 rounded-2xl border border-orange-100 dark:border-orange-800 transition-colors">
-                          <p className="text-xs text-orange-600 dark:text-orange-400 font-bold mb-3 flex items-center justify-center gap-1 uppercase tracking-wide transition-colors">
-                             <ArrowRightLeft className="w-3 h-3" />
-                             Phân vân giữa 2 size
-                          </p>
-                          <div className="flex items-center justify-center gap-8">
-                            <div className="flex flex-col items-center">
-                              <span className="text-gray-400 dark:text-gray-500 text-[10px] mb-1 font-bold uppercase tracking-wide transition-colors">Thoải mái</span>
-                              <div className="text-4xl font-black text-gray-800 dark:text-white transition-colors">{prediction.suggestedSize}</div>
-                            </div>
-                            <div className="h-8 w-px bg-gray-300/50 dark:bg-gray-700/50 transition-colors"></div>
-                            <div className="flex flex-col items-center">
-                              <span className="text-gray-400 dark:text-gray-500 text-[10px] mb-1 font-bold uppercase tracking-wide transition-colors">Ôm body</span>
-                              <div className="text-4xl font-black text-gray-800 dark:text-white transition-colors">{prediction.alternativeSize}</div>
-                            </div>
-                          </div>
+                        <div className="relative">
+                           <div className="flex items-center justify-center mb-4">
+                              <span className="flex items-center gap-1.5 px-3 py-1 bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 rounded-full text-[10px] font-bold uppercase tracking-wider border border-orange-100 dark:border-orange-900/30">
+                                 <ArrowRightLeft className="w-3 h-3" />
+                                 Phân vân size
+                              </span>
+                           </div>
+
+                           <div className="flex items-center justify-center gap-2 sm:gap-4">
+                              {/* Suggested Size */}
+                              <div className="flex-1 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl p-4 text-center shadow-lg shadow-indigo-200 dark:shadow-none transform transition hover:scale-[1.02]">
+                                  <div className="text-indigo-100 text-[10px] font-bold uppercase tracking-wide mb-1 opacity-90">Ưu tiên</div>
+                                  <div className="text-5xl sm:text-6xl font-black text-white">{prediction.suggestedSize}</div>
+                                  <div className="text-indigo-100 text-[10px] mt-1 font-medium">Vừa vặn nhất</div>
+                              </div>
+
+                              {/* VS Badge */}
+                              <div className="flex flex-col items-center z-10 -mx-3 sm:mx-0">
+                                 <div className="w-8 h-8 rounded-full bg-white dark:bg-gray-900 border-2 border-indigo-50 dark:border-gray-700 flex items-center justify-center shadow-sm">
+                                     <span className="text-[9px] font-bold text-gray-400 dark:text-gray-500">VS</span>
+                                 </div>
+                              </div>
+
+                              {/* Alternative Size */}
+                              <div className="flex-1 bg-white dark:bg-gray-800 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl p-4 text-center hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors cursor-default">
+                                  <div className="text-gray-400 dark:text-gray-500 text-[10px] font-bold uppercase tracking-wide mb-1">Tham khảo</div>
+                                  <div className="text-5xl sm:text-6xl font-black text-gray-700 dark:text-gray-200">{prediction.alternativeSize}</div>
+                                  <div className="text-gray-400 dark:text-gray-500 text-[10px] mt-1 font-medium">Size thay thế</div>
+                              </div>
+                           </div>
+                           
+                           <div className="mt-4 text-center">
+                              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 px-3 py-1 rounded-lg">
+                                Độ tin cậy: <span className="text-gray-800 dark:text-white font-bold">{Math.round(prediction.confidence)}%</span>
+                              </span>
+                           </div>
                         </div>
                       ) : (
                         <div>
