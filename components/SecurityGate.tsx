@@ -13,7 +13,7 @@ export const SecurityGate: React.FC<SecurityGateProps> = ({ onUnlock }) => {
 
   // MẬT KHẨU MẶC ĐỊNH: 123456
   // Bạn có thể thay đổi chuỗi này thành bất cứ gì bạn muốn bảo mật
-  const SECRET_CODE = "123456";
+  const SECRET_CODE = "308203";
 
   const handleLogin = (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -82,6 +82,9 @@ export const SecurityGate: React.FC<SecurityGateProps> = ({ onUnlock }) => {
               <span>Mở khóa hệ thống</span>
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </button>
+            
+            {/* DEMO HINT - DELETE THIS LINE IN PRODUCTION */}
+            <p className="text-center text-xs text-gray-500">(Gợi ý mật khẩu demo: 123456)</p>
           </form>
 
           <div className="mt-8 flex items-center justify-center gap-2 text-gray-500 text-xs">
