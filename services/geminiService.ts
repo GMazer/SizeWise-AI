@@ -1,233 +1,108 @@
-import { GoogleGenAI, Type } from "@google/genai";
 import { BodyMeasurements, SizePrediction } from "../types";
 
-// Initialize the client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-// --- MÔ PHỎNG MODEL LOGIC (Chuyển từ Python sang TypeScript) ---
-// Vì browser không chạy được file .pkl, ta mô phỏng logic quyết định.
-
-const SIZES = ['S', 'M', 'L', 'XL'];
-
-// Hàm mô phỏng Model Basic (Chỉ dựa vào Cao/Nặng & Hiệu số)
-const simulateModelBasic = (height: number, weight: number): { size: string, altSize?: string, isAmbiguous: boolean, confidence: number } => {
-  // Logic: Tính toán điểm số dựa trên cân nặng điều chỉnh bởi chiều cao (tương tự BMI nhưng tinh chỉnh cho fit đồ)
-  // Công thức giả lập: Weight - (Height - 160) * 0.4
-  // Người cao hơn thì cùng cân nặng sẽ trông gầy hơn -> Score thấp hơn -> Size nhỏ hơn
-  const adjustedScore = weight - (height - 160) * 0.4;
-
-  let sizeIndex = 0;
-  let confidence = 0;
-
-  // Ngưỡng phân loại (Decision Boundaries giả lập cho form người VN)
-  // < 48: S
-  // 48 - 58: M
-  // 58 - 68: L
-  // > 68: XL
-  if (adjustedScore < 48) {
-    sizeIndex = 0; // S
-    confidence = 100 - (adjustedScore - 40) * 2; 
-  } else if (adjustedScore < 58) {
-    sizeIndex = 1; // M
-    confidence = 100 - Math.abs(adjustedScore - 53) * 3;
-  } else if (adjustedScore < 68) {
-    sizeIndex = 2; // L
-    confidence = 100 - Math.abs(adjustedScore - 63) * 3;
-  } else {
-    sizeIndex = 3; // XL
-    confidence = 100 - (75 - adjustedScore) * 2;
-  }
-
-  // Cap index và confidence
-  sizeIndex = Math.max(0, Math.min(3, sizeIndex));
-  confidence = Math.max(65, Math.min(98, confidence)); 
-
-  const suggestedSize = SIZES[sizeIndex];
-  
-  // Logic Ambiguous (Phân vân): Giống Python "if (score_1 - score_2) < 0.15"
-  // Ở đây ta kiểm tra nếu điểm số nằm sát ranh giới (± 1.5 đơn vị)
-  const boundaries = [48, 58, 68];
-  let isAmbiguous = false;
-  let altSize = undefined;
-
-  for (let i = 0; i < boundaries.length; i++) {
-    if (Math.abs(adjustedScore - boundaries[i]) < 1.5) {
-      isAmbiguous = true;
-      // Nếu < boundary -> đang ở size nhỏ (suggested), alt là size lớn
-      // Nếu > boundary -> đang ở size lớn (suggested), alt là size nhỏ
-      if (adjustedScore < boundaries[i]) {
-         // Đang S, gần M -> Alt M
-         altSize = SIZES[i+1]; 
-      } else {
-         // Đang M, gần S -> Alt S
-         altSize = SIZES[i];
-      }
-      break;
-    }
-  }
-
-  // Sắp xếp lại: Suggested luôn là size lớn (thoải mái) nếu ambiguous, theo logic bài toán
-  if (isAmbiguous && altSize) {
-      const idxSug = SIZES.indexOf(suggestedSize);
-      const idxAlt = SIZES.indexOf(altSize);
-      if (idxSug < idxAlt) {
-          return { size: altSize, altSize: suggestedSize, isAmbiguous: true, confidence: 70 };
-      }
-  }
-
-  return {
-    size: suggestedSize,
-    altSize: isAmbiguous ? altSize : undefined,
-    isAmbiguous,
-    confidence
-  };
-};
-
-// Hàm mô phỏng Model Full (Dựa trên 3 vòng)
-const simulateModelFull = (measurements: BodyMeasurements): { size: string, confidence: number } => {
-  const h = parseFloat(measurements.height);
-  const w = parseFloat(measurements.weight);
-  const bust = parseFloat(measurements.bust);
-  const waist = parseFloat(measurements.waist);
-  const hips = parseFloat(measurements.hips);
-
-  // Logic Max Size: Quần áo phải vừa chỗ to nhất trên cơ thể
-  // Bảng size tham khảo
-  const getSize = (val: number, type: 'bust'|'waist'|'hips') => {
-      if (type === 'bust') {
-          if (val < 84) return 0; // S
-          if (val < 90) return 1; // M
-          if (val < 96) return 2; // L
-          return 3; // XL
-      }
-      if (type === 'waist') {
-          if (val < 66) return 0;
-          if (val < 72) return 1;
-          if (val < 78) return 2;
-          return 3;
-      }
-      if (type === 'hips') {
-          if (val < 90) return 0;
-          if (val < 96) return 1;
-          if (val < 102) return 2;
-          return 3;
-      }
-      return 0;
-  };
-
-  const idxBust = getSize(bust, 'bust');
-  const idxWaist = getSize(waist, 'waist');
-  const idxHips = getSize(hips, 'hips');
-
-  // Basic check để tránh size quá lệch với cân nặng
-  const basicRes = simulateModelBasic(h, w);
-  const idxWeight = SIZES.indexOf(basicRes.size);
-
-  // Lấy max của các vòng chính
-  let finalIdx = Math.max(idxBust, idxWaist, idxHips);
-
-  // Điều chỉnh: Nếu size theo cân nặng nhỏ hơn size vòng quá nhiều (vd bụng to), ưu tiên size vòng
-  // Nếu size cân nặng lớn hơn size vòng (người đặc), ưu tiên trung bình
-  if (idxWeight > finalIdx) {
-      finalIdx = Math.ceil((finalIdx + idxWeight) / 2);
-  }
-
-  finalIdx = Math.max(0, Math.min(3, finalIdx));
-
-  return {
-    size: SIZES[finalIdx],
-    confidence: 95 // Model Full độ tin cậy cao
-  };
-};
-
-// --- MAIN SERVICE ---
+const API_URL = "https://mavo-size-api.onrender.com";
 
 export const predictSizeWithGemini = async (
   measurements: BodyMeasurements,
   useFullModel: boolean
 ): Promise<SizePrediction> => {
   try {
-    const height = parseFloat(measurements.height);
-    const weight = parseFloat(measurements.weight);
-    const hieu_so = height - weight;
+    // 1. Chuẩn bị dữ liệu gửi lên API theo format yêu cầu
+    // Model Python thường yêu cầu số (float), nên cần parse từ string
+    const requestBody = {
+      cao: parseFloat(measurements.height) || 0,
+      nang: parseFloat(measurements.weight) || 0,
+      nguc: parseFloat(measurements.bust) || 0,
+      eo: parseFloat(measurements.waist) || 0,
+      mong: parseFloat(measurements.hips) || 0,
+    };
 
-    // 1. CHẠY LOGIC TÍNH TOÁN CỨNG (Rule-based)
-    let calculatedResult;
-    
-    if (useFullModel) {
-      const res = simulateModelFull(measurements);
-      calculatedResult = {
-        suggestedSize: res.size,
-        alternativeSize: undefined,
-        isAmbiguous: false,
-        confidence: res.confidence
-      };
-    } else {
-      const res = simulateModelBasic(height, weight);
-      calculatedResult = {
-        suggestedSize: res.size,
-        alternativeSize: res.altSize,
-        isAmbiguous: res.isAmbiguous,
-        confidence: res.confidence
-      };
-    }
-
-    // 2. DÙNG GEMINI ĐỂ VIẾT LỜI KHUYÊN (Text Generation Only)
-    // AI sẽ nhận đầu vào là kết quả đã tính toán và số liệu, để viết văn giải thích
-    const prompt = `
-      Bạn là chuyên gia tư vấn thời trang MAVO.
-      
-      Thông tin khách:
-      - Cao: ${measurements.height}cm, Nặng: ${measurements.weight}kg
-      - Hiệu số (Cao - Nặng): ${hieu_so}
-      ${useFullModel ? `- Số đo 3 vòng: ${measurements.bust} - ${measurements.waist} - ${measurements.hips}` : ''}
-      
-      KẾT QUẢ TÍNH TOÁN CỦA HỆ THỐNG (BẠN PHẢI TUÂN THEO):
-      - Size chính: ${calculatedResult.suggestedSize}
-      ${calculatedResult.isAmbiguous ? `- Size phụ (ôm body): ${calculatedResult.alternativeSize}` : ''}
-      
-      Nhiệm vụ: Viết JSON giải thích và lời khuyên.
-      - "explanation": Giải thích ngắn gọn tại sao chọn size ${calculatedResult.suggestedSize} dựa trên số liệu. ${calculatedResult.isAmbiguous ? `Nhắc đến việc khách hàng đang ở ngưỡng giữa 2 size, chọn ${calculatedResult.suggestedSize} để thoải mái hoặc size kia để ôm body.` : ''}
-      - "advice": Lời khuyên phối đồ cho dáng người này (ví dụ dáng quả lê, táo, hay chữ nhật dựa trên số đo).
-    `;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            explanation: { type: Type.STRING },
-            advice: { type: Type.STRING },
-          },
-          required: ["explanation", "advice"],
-        },
+    // 2. Gọi API
+    const response = await fetch(`${API_URL}/predict`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
       },
+      body: JSON.stringify(requestBody)
     });
 
-    const responseText = response.text;
-    const textData = responseText ? JSON.parse(responseText) : { explanation: "Phù hợp với chỉ số cơ thể của bạn.", advice: "Chọn trang phục tôn dáng." };
+    if (!response.ok) {
+      throw new Error(`Lỗi kết nối Server: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    // 3. Xử lý dữ liệu trả về từ API
+    // Giả định API trả về JSON có các trường như size, confidence, hoặc chỉ size.
+    // Map dữ liệu API về cấu trúc frontend cần.
+    const suggestedSize = data.size || data.prediction || "M"; 
+    const confidence = data.confidence ? parseFloat(data.confidence) : 95;
+    const isAmbiguous = data.is_ambiguous || false;
+    const alternativeSize = data.alt_size || data.alternative_size || undefined;
+
+    const resultStruct = {
+        suggestedSize,
+        alternativeSize,
+        isAmbiguous,
+        confidence
+    };
+
+    // 4. Tạo nội dung chữ (Explanation/Advice) tại Client
+    // Vì API model thường chỉ trả về kết quả dự đoán (Label), ta giữ lại hàm sinh text ở frontend để UI đẹp.
+    const explanation = getStaticExplanation(resultStruct, measurements, useFullModel);
+    const advice = getStaticAdvice(suggestedSize);
 
     return {
-      suggestedSize: calculatedResult.suggestedSize,
-      alternativeSize: calculatedResult.alternativeSize,
-      isAmbiguous: calculatedResult.isAmbiguous,
-      confidence: calculatedResult.confidence,
-      explanation: textData.explanation,
-      advice: textData.advice
+      suggestedSize,
+      alternativeSize,
+      isAmbiguous,
+      confidence,
+      explanation,
+      advice
     };
 
   } catch (error) {
-    console.error("Error:", error);
-    // Fallback safe return
+    console.error("API Error:", error);
     return {
-      suggestedSize: "M", 
+      suggestedSize: "Error", 
       confidence: 0,
-      explanation: "Có lỗi kết nối, vui lòng tham khảo bảng size.",
-      advice: "Cân nhắc thử trực tiếp tại cửa hàng.",
+      explanation: "Không thể kết nối đến máy chủ dự đoán (API). Có thể server đang khởi động, vui lòng thử lại sau giây lát.",
+      advice: "Kiểm tra kết nối mạng của bạn.",
       isAmbiguous: false
     };
   }
+};
+
+// --- HELPER FUNCTIONS FOR STATIC TEXT ---
+// Giữ lại các hàm này để tạo nội dung hiển thị thân thiện với người dùng
+
+const getStaticExplanation = (result: any, measurements: BodyMeasurements, useFullModel: boolean) => {
+    const h = measurements.height;
+    const w = measurements.weight;
+
+    if (result.isAmbiguous && result.alternativeSize) {
+        return `Dựa trên chiều cao ${h}cm và cân nặng ${w}kg, Server MAVO nhận thấy chỉ số của bạn nằm ở ngưỡng chuyển giao giữa size ${result.suggestedSize} và ${result.alternativeSize}. Hệ thống ưu tiên đề xuất size ${result.suggestedSize} để đảm bảo sự thoải mái. Tuy nhiên, nếu thích mặc ôm (Slim-fit), bạn có thể chọn ${result.alternativeSize}.`;
+    }
+
+    let detailText = "";
+    if (useFullModel) {
+        detailText = `kết hợp với số đo 3 vòng (${measurements.bust}-${measurements.waist}-${measurements.hips}), `;
+    }
+
+    return `Hệ thống AI MAVO đã phân tích dữ liệu: Cao ${h}cm, Nặng ${w}kg ${detailText}và xác định Size ${result.suggestedSize} là lựa chọn tối ưu nhất cho vóc dáng của bạn.`;
+};
+
+const getStaticAdvice = (size: string) => {
+    switch (size) {
+        case 'S':
+            return "Size S phù hợp với vóc dáng nhỏ nhắn. Hãy ưu tiên các mẫu áo sáng màu hoặc họa tiết kẻ ngang để tạo cảm giác đầy đặn hơn. Tránh đồ quá rộng (Oversize).";
+        case 'M':
+            return "Size M dành cho vóc dáng cân đối. Bạn có thể thoải mái thử nghiệm nhiều phong cách từ Slim-fit đến Regular-fit.";
+        case 'L':
+            return "Size L phù hợp với vóc dáng chuẩn. Các thiết kế tối giản, form dáng vừa vặn sẽ giúp tôn lên chiều cao và vẻ nam tính của bạn.";
+        case 'XL':
+            return "Size XL dành cho vóc dáng cao lớn hoặc đậm người. Hãy chọn trang phục vừa vặn, chất liệu đứng form nhưng co giãn tốt để luôn thoải mái.";
+        default:
+            return "Hãy chọn trang phục mang lại sự tự tin và thoải mái nhất cho bạn.";
+    }
 };
