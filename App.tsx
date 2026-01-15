@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
-import { Ruler, Weight, User, CheckCircle2, Loader2, Sparkles, Shirt, ArrowRightLeft, Eraser, Moon, Sun, History } from 'lucide-react';
+import { Ruler, Weight, User, CheckCircle2, Loader2, Sparkles, Shirt, ArrowRightLeft, Eraser, Moon, Sun, History, HelpCircle } from 'lucide-react';
 import { InputField } from './components/InputField';
 import { BodyMeasurements, SizePrediction, HistoryItem } from './types';
 import { predictSizeWithGemini } from './services/geminiService';
 import { HistoryModal } from './components/HistoryModal';
+import { TutorialModal } from './components/TutorialModal';
 
 const App: React.FC = () => {
   const [measurements, setMeasurements] = useState<BodyMeasurements>({
@@ -22,8 +23,12 @@ const App: React.FC = () => {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
-  // Load history from localStorage on mount
+  // Tutorial State
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false);
+
+  // Load history & Check tutorial seen from localStorage on mount
   useEffect(() => {
+    // Load History
     const savedHistory = localStorage.getItem('sizeWiseHistory');
     if (savedHistory) {
       try {
@@ -32,7 +37,22 @@ const App: React.FC = () => {
         console.error("Failed to parse history", e);
       }
     }
+
+    // Check Tutorial
+    const hasSeenTutorial = localStorage.getItem('sizeWiseTutorialSeen');
+    if (!hasSeenTutorial) {
+      // Delay slightly for better UX
+      const timer = setTimeout(() => {
+        setIsTutorialOpen(true);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
   }, []);
+
+  const handleCloseTutorial = () => {
+    setIsTutorialOpen(false);
+    localStorage.setItem('sizeWiseTutorialSeen', 'true');
+  };
 
   // Save history to localStorage whenever it changes
   useEffect(() => {
@@ -136,8 +156,16 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-[#f8fafc] dark:bg-gray-950 py-8 px-4 sm:px-6 lg:px-8 font-sans transition-colors duration-300">
       <div className="max-w-4xl mx-auto relative">
         
-        {/* Top Actions: History & Theme Toggle */}
+        {/* Top Actions: Tutorial, History & Theme Toggle */}
         <div className="absolute top-0 right-0 flex items-center gap-2">
+           <button
+            onClick={() => setIsTutorialOpen(true)}
+            className="p-2 rounded-full bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-indigo-50 dark:hover:bg-gray-700 transition-all focus:outline-none"
+            title="Hướng dẫn sử dụng"
+          >
+            <HelpCircle className="w-5 h-5" />
+          </button>
+
            <button
             onClick={() => setIsHistoryOpen(true)}
             className="p-2 rounded-full bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all focus:outline-none"
@@ -400,6 +428,12 @@ const App: React.FC = () => {
         onClose={() => setIsHistoryOpen(false)} 
         history={history}
         onClear={handleClearHistory}
+      />
+      
+      {/* Tutorial Modal */}
+      <TutorialModal
+        isOpen={isTutorialOpen}
+        onClose={handleCloseTutorial}
       />
     </div>
   );
