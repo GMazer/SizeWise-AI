@@ -1,14 +1,32 @@
 
 import React, { useState, useEffect } from 'react';
-import { Ruler, Weight, User, CheckCircle2, Loader2, Sparkles, Shirt, ArrowRightLeft, Eraser, Moon, Sun, History, HelpCircle } from 'lucide-react';
+import { Ruler, Weight, User, CheckCircle2, Loader2, Sparkles, Shirt, ArrowRightLeft, Eraser, Moon, Sun, History, HelpCircle, LogOut } from 'lucide-react';
 import { InputField } from './components/InputField';
 import { BodyMeasurements, SizePrediction, HistoryItem } from './types';
 import { predictSizeWithGemini } from './services/geminiService';
 import { HistoryModal } from './components/HistoryModal';
 import { TutorialModal } from './components/TutorialModal';
 import { NotificationToast, NotificationType } from './components/NotificationToast';
+import { SecurityGate } from './components/SecurityGate';
 
 const App: React.FC = () => {
+  // --- AUTHENTICATION STATE ---
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Check session storage on mount
+  useEffect(() => {
+    const auth = sessionStorage.getItem('sizeWise_auth');
+    if (auth === 'true') {
+      setIsAuthenticated(true);
+    }
+  }, []);
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('sizeWise_auth');
+    setIsAuthenticated(false);
+  };
+
+  // --- APP STATE ---
   const [measurements, setMeasurements] = useState<BodyMeasurements>({
     height: '',
     weight: '',
@@ -42,8 +60,10 @@ const App: React.FC = () => {
     setNotification(prev => ({ ...prev, isVisible: false }));
   };
 
-  // Load history & Check tutorial seen from localStorage on mount
+  // Load history & Check tutorial seen from localStorage on mount (Only if authenticated)
   useEffect(() => {
+    if (!isAuthenticated) return; // Chỉ load dữ liệu khi đã đăng nhập
+
     // Load History
     const savedHistory = localStorage.getItem('sizeWiseHistory');
     if (savedHistory) {
@@ -63,7 +83,7 @@ const App: React.FC = () => {
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   const handleCloseTutorial = () => {
     setIsTutorialOpen(false);
@@ -72,19 +92,19 @@ const App: React.FC = () => {
 
   // Save history to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem('sizeWiseHistory', JSON.stringify(history));
-  }, [history]);
+    if (isAuthenticated) {
+      localStorage.setItem('sizeWiseHistory', JSON.stringify(history));
+    }
+  }, [history, isAuthenticated]);
 
   // Dark Mode State
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
-    // Check system preference on initial load
     if (typeof window !== 'undefined') {
       return window.matchMedia('(prefers-color-scheme: dark)').matches;
     }
     return false;
   });
 
-  // Apply dark mode class to html element
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
@@ -117,8 +137,6 @@ const App: React.FC = () => {
   };
 
   const handleClearHistory = () => {
-    // Dùng window.confirm ở đây vẫn chấp nhận được vì nó là hành động nguy hiểm cần chặn
-    // Tuy nhiên, có thể thay bằng Custom Modal sau này.
     if (window.confirm("Bạn có chắc chắn muốn xóa toàn bộ lịch sử?")) {
       setHistory([]);
       showNotification("Đã xóa toàn bộ lịch sử tra cứu", 'success');
@@ -136,7 +154,6 @@ const App: React.FC = () => {
     const hasAll3Vong = measurements.bust && measurements.waist && measurements.hips;
 
     if (hasAny3Vong && !hasAll3Vong) {
-      // Thay thế alert cũ bằng Notification Warning
       showNotification(
         "Nếu bạn nhập số đo 3 vòng, vui lòng nhập đầy đủ cả 3 (Ngực, Eo, Mông) để có kết quả chính xác, hoặc để trống tất cả.",
         'warning'
@@ -153,7 +170,6 @@ const App: React.FC = () => {
       const result = await predictSizeWithGemini(measurements, useFullModel);
       setPrediction(result);
 
-      // Add to history if successful
       const newHistoryItem: HistoryItem = {
         id: Date.now().toString(),
         timestamp: Date.now(),
@@ -180,10 +196,15 @@ const App: React.FC = () => {
     return "text-2xl";
   };
 
+  // --- SECURITY CHECK RENDER ---
+  if (!isAuthenticated) {
+    return <SecurityGate onUnlock={() => setIsAuthenticated(true)} />;
+  }
+
+  // --- MAIN APP RENDER ---
   return (
     <div className="min-h-screen bg-[#f8fafc] dark:bg-gray-950 py-8 px-4 sm:px-6 lg:px-8 font-sans transition-colors duration-300">
       
-      {/* Toast Notification Component */}
       <NotificationToast 
         message={notification.message}
         type={notification.type}
@@ -193,7 +214,7 @@ const App: React.FC = () => {
 
       <div className="max-w-4xl mx-auto relative">
         
-        {/* Top Actions: Tutorial, History & Theme Toggle */}
+        {/* Top Actions */}
         <div className="absolute top-0 right-0 flex items-center gap-2">
            <button
             onClick={() => setIsTutorialOpen(true)}
@@ -217,6 +238,14 @@ const App: React.FC = () => {
             title={isDarkMode ? "Chuyển sang chế độ sáng" : "Chuyển sang chế độ tối"}
           >
             {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </button>
+
+          <button
+            onClick={handleLogout}
+            className="p-2 rounded-full bg-white dark:bg-gray-800 text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all focus:outline-none ml-2"
+            title="Khóa lại"
+          >
+            <LogOut className="w-5 h-5" />
           </button>
         </div>
 
