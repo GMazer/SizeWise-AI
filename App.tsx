@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { Ruler, Weight, User, CheckCircle2, Loader2, Sparkles, Shirt, ArrowRightLeft, Eraser, Moon, Sun } from 'lucide-react';
+import { Ruler, Weight, User, CheckCircle2, Loader2, Sparkles, Shirt, ArrowRightLeft, Eraser, Moon, Sun, History } from 'lucide-react';
 import { InputField } from './components/InputField';
-import { BodyMeasurements, SizePrediction } from './types';
+import { BodyMeasurements, SizePrediction, HistoryItem } from './types';
 import { predictSizeWithGemini } from './services/geminiService';
+import { HistoryModal } from './components/HistoryModal';
 
 const App: React.FC = () => {
   const [measurements, setMeasurements] = useState<BodyMeasurements>({
@@ -17,6 +18,27 @@ const App: React.FC = () => {
   const [prediction, setPrediction] = useState<SizePrediction | null>(null);
   const [loading, setLoading] = useState(false);
   
+  // History State
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+
+  // Load history from localStorage on mount
+  useEffect(() => {
+    const savedHistory = localStorage.getItem('sizeWiseHistory');
+    if (savedHistory) {
+      try {
+        setHistory(JSON.parse(savedHistory));
+      } catch (e) {
+        console.error("Failed to parse history", e);
+      }
+    }
+  }, []);
+
+  // Save history to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('sizeWiseHistory', JSON.stringify(history));
+  }, [history]);
+
   // Dark Mode State
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     // Check system preference on initial load
@@ -57,6 +79,12 @@ const App: React.FC = () => {
     setPrediction(null);
   };
 
+  const handleClearHistory = () => {
+    if (window.confirm("Bạn có chắc chắn muốn xóa toàn bộ lịch sử?")) {
+      setHistory([]);
+    }
+  };
+
   const handlePredict = async () => {
     if (!measurements.height || !measurements.weight) {
       alert("Vui lòng nhập Chiều cao và Cân nặng!");
@@ -79,6 +107,16 @@ const App: React.FC = () => {
     try {
       const result = await predictSizeWithGemini(measurements, useFullModel);
       setPrediction(result);
+
+      // Add to history if successful
+      const newHistoryItem: HistoryItem = {
+        id: Date.now().toString(),
+        timestamp: Date.now(),
+        measurements: { ...measurements },
+        prediction: result
+      };
+      setHistory(prev => [newHistoryItem, ...prev]);
+
     } catch (error) {
       console.error(error);
     } finally {
@@ -98,14 +136,24 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-[#f8fafc] dark:bg-gray-950 py-8 px-4 sm:px-6 lg:px-8 font-sans transition-colors duration-300">
       <div className="max-w-4xl mx-auto relative">
         
-        {/* Theme Toggle Button - Absolute Top Right */}
-        <button
-          onClick={toggleTheme}
-          className="absolute top-0 right-0 p-2 rounded-full bg-white dark:bg-gray-800 text-gray-500 dark:text-yellow-400 shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all focus:outline-none"
-          title={isDarkMode ? "Chuyển sang chế độ sáng" : "Chuyển sang chế độ tối"}
-        >
-          {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-        </button>
+        {/* Top Actions: History & Theme Toggle */}
+        <div className="absolute top-0 right-0 flex items-center gap-2">
+           <button
+            onClick={() => setIsHistoryOpen(true)}
+            className="p-2 rounded-full bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all focus:outline-none"
+            title="Xem lịch sử"
+          >
+            <History className="w-5 h-5" />
+          </button>
+
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-full bg-white dark:bg-gray-800 text-gray-500 dark:text-yellow-400 shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all focus:outline-none"
+            title={isDarkMode ? "Chuyển sang chế độ sáng" : "Chuyển sang chế độ tối"}
+          >
+            {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </button>
+        </div>
 
         {/* Header */}
         <div className="text-center mb-10 pt-4">
@@ -345,6 +393,14 @@ const App: React.FC = () => {
            © 2026 SizeWise AI. Powered by Hyle.
         </div>
       </div>
+
+      {/* History Modal */}
+      <HistoryModal 
+        isOpen={isHistoryOpen} 
+        onClose={() => setIsHistoryOpen(false)} 
+        history={history}
+        onClear={handleClearHistory}
+      />
     </div>
   );
 };

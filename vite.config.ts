@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
   // Load các biến môi trường từ file .env (nếu chạy local) hoặc từ hệ thống (Netlify)
   // Tham số thứ 3 là '' để load tất cả các biến, không chỉ biến bắt đầu bằng VITE_
-  const env = loadEnv(mode, process.cwd(), '');
+  const env = loadEnv(mode, '.', '');
 
   return {
     plugins: [react()],

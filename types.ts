@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 export interface BodyMeasurements {
@@ -16,6 +17,13 @@ export interface SizePrediction {
   // Fields for Basic Model logic (ambiguous cases)
   alternativeSize?: string;
   isAmbiguous?: boolean;
+}
+
+export interface HistoryItem {
+  id: string;
+  timestamp: number;
+  measurements: BodyMeasurements;
+  prediction: SizePrediction;
 }
 
 export interface InputFieldProps {
