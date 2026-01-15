@@ -1,10 +1,8 @@
+
 import { BodyMeasurements, SizePrediction } from "../types";
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 
 const API_URL = "https://mavo-size-api.onrender.com";
-
-// Khởi tạo Gemini AI Client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const predictSizeWithGemini = async (
   measurements: BodyMeasurements,
@@ -51,7 +49,7 @@ export const predictSizeWithGemini = async (
         advice = geminiContent.advice;
     } catch (geminiError) {
         console.warn("Gemini Error, falling back to static text:", geminiError);
-        // Fallback về text tĩnh nếu Gemini lỗi (hết quota, network...)
+        // Fallback về text tĩnh nếu Gemini lỗi (hết quota, network, key invalid...)
         const resultStruct = { suggestedSize, alternativeSize, isAmbiguous, confidence };
         explanation = getStaticExplanation(resultStruct, measurements, useFullModel);
         advice = getStaticAdvice(suggestedSize);
@@ -86,6 +84,14 @@ async function generateStylistAdvice(
     alternativeSize: string | undefined, 
     isAmbiguous: boolean
 ): Promise<{ explanation: string; advice: string }> {
+
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+        throw new Error("API Key chưa được cấu hình (process.env.API_KEY is empty)");
+    }
+
+    // Khởi tạo Gemini AI Client tại thời điểm gọi hàm
+    const ai = new GoogleGenAI({ apiKey });
 
     // Sử dụng model Flash cho phản hồi nhanh (low latency)
     const modelId = "gemini-3-flash-preview"; 
