@@ -86,6 +86,14 @@ const App: React.FC = () => {
     }
   };
 
+  // Helper function to dynamically calculate font size class based on text length
+  const getSizeFontSize = (text: string) => {
+    if (text.length <= 2) return "text-7xl";
+    if (text.length <= 4) return "text-5xl";
+    if (text.length <= 8) return "text-3xl";
+    return "text-2xl";
+  };
+
   return (
     <div className="min-h-screen bg-[#f8fafc] dark:bg-gray-950 py-8 px-4 sm:px-6 lg:px-8 font-sans transition-colors duration-300">
       <div className="max-w-4xl mx-auto relative">
@@ -295,7 +303,7 @@ const App: React.FC = () => {
                       ) : (
                         <div>
                            <div className="relative inline-block">
-                             <div className="text-white text-7xl font-black rounded-3xl w-36 h-36 flex items-center justify-center shadow-xl shadow-indigo-200 dark:shadow-indigo-900/40 bg-gradient-to-br from-indigo-600 to-purple-600 mx-auto transform transition-transform hover:scale-105 duration-300">
+                             <div className={`text-white ${getSizeFontSize(prediction.suggestedSize)} font-black rounded-3xl w-36 h-36 flex items-center justify-center shadow-xl shadow-indigo-200 dark:shadow-indigo-900/40 bg-gradient-to-br from-indigo-600 to-purple-600 mx-auto transform transition-transform hover:scale-105 duration-300 overflow-hidden px-2 break-words`}>
                                {prediction.suggestedSize}
                              </div>
                              <div className="absolute -bottom-3 left-1/2 transform -translate-x-1/2 bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 text-xs font-bold px-3 py-1 rounded-full shadow-md border border-indigo-50 dark:border-gray-700 whitespace-nowrap transition-colors">
