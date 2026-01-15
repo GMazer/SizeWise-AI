@@ -6,6 +6,7 @@ import { BodyMeasurements, SizePrediction, HistoryItem } from './types';
 import { predictSizeWithGemini } from './services/geminiService';
 import { HistoryModal } from './components/HistoryModal';
 import { TutorialModal } from './components/TutorialModal';
+import { NotificationToast, NotificationType } from './components/NotificationToast';
 
 const App: React.FC = () => {
   const [measurements, setMeasurements] = useState<BodyMeasurements>({
@@ -25,6 +26,21 @@ const App: React.FC = () => {
 
   // Tutorial State
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
+
+  // Notification State
+  const [notification, setNotification] = useState<{ message: string; type: NotificationType; isVisible: boolean }>({
+    message: '',
+    type: 'info',
+    isVisible: false
+  });
+
+  const showNotification = (message: string, type: NotificationType = 'info') => {
+    setNotification({ message, type, isVisible: true });
+  };
+
+  const closeNotification = () => {
+    setNotification(prev => ({ ...prev, isVisible: false }));
+  };
 
   // Load history & Check tutorial seen from localStorage on mount
   useEffect(() => {
@@ -97,17 +113,22 @@ const App: React.FC = () => {
       hips: '',
     });
     setPrediction(null);
+    showNotification("Đã làm mới dữ liệu đầu vào", 'info');
   };
 
   const handleClearHistory = () => {
+    // Dùng window.confirm ở đây vẫn chấp nhận được vì nó là hành động nguy hiểm cần chặn
+    // Tuy nhiên, có thể thay bằng Custom Modal sau này.
     if (window.confirm("Bạn có chắc chắn muốn xóa toàn bộ lịch sử?")) {
       setHistory([]);
+      showNotification("Đã xóa toàn bộ lịch sử tra cứu", 'success');
+      setIsHistoryOpen(false);
     }
   };
 
   const handlePredict = async () => {
     if (!measurements.height || !measurements.weight) {
-      alert("Vui lòng nhập Chiều cao và Cân nặng!");
+      showNotification("Vui lòng nhập Chiều cao và Cân nặng!", 'error');
       return;
     }
 
@@ -115,7 +136,11 @@ const App: React.FC = () => {
     const hasAll3Vong = measurements.bust && measurements.waist && measurements.hips;
 
     if (hasAny3Vong && !hasAll3Vong) {
-      alert("Nếu bạn nhập số đo 3 vòng, vui lòng nhập đầy đủ cả 3 (Ngực, Eo, Mông) để có kết quả chính xác, hoặc để trống tất cả.");
+      // Thay thế alert cũ bằng Notification Warning
+      showNotification(
+        "Nếu bạn nhập số đo 3 vòng, vui lòng nhập đầy đủ cả 3 (Ngực, Eo, Mông) để có kết quả chính xác, hoặc để trống tất cả.",
+        'warning'
+      );
       return;
     }
 
@@ -136,9 +161,12 @@ const App: React.FC = () => {
         prediction: result
       };
       setHistory(prev => [newHistoryItem, ...prev]);
+      
+      showNotification("Đã tìm thấy size phù hợp với bạn!", 'success');
 
     } catch (error) {
       console.error(error);
+      showNotification("Có lỗi xảy ra khi kết nối. Vui lòng thử lại.", 'error');
     } finally {
       setLoading(false);
     }
@@ -154,6 +182,15 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] dark:bg-gray-950 py-8 px-4 sm:px-6 lg:px-8 font-sans transition-colors duration-300">
+      
+      {/* Toast Notification Component */}
+      <NotificationToast 
+        message={notification.message}
+        type={notification.type}
+        isVisible={notification.isVisible}
+        onClose={closeNotification}
+      />
+
       <div className="max-w-4xl mx-auto relative">
         
         {/* Top Actions: Tutorial, History & Theme Toggle */}
