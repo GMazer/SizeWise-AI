@@ -1,14 +1,18 @@
 import { BodyMeasurements, SizePrediction } from "../types";
+import { GoogleGenAI, Type, Schema } from "@google/genai";
 
 const API_URL = "https://mavo-size-api.onrender.com";
+
+// Khởi tạo Gemini AI Client
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const predictSizeWithGemini = async (
   measurements: BodyMeasurements,
   useFullModel: boolean
 ): Promise<SizePrediction> => {
   try {
-    // 1. Chuẩn bị dữ liệu gửi lên API theo format yêu cầu
-    // Model Python thường yêu cầu số (float), nên cần parse từ string
+    // 1. GỌI PYTHON API: Để lấy Size chính xác (Logic toán học/Random Forest)
+    // AI LLM giỏi văn nhưng đôi khi tính toán size cụ thể không ổn định bằng thuật toán chuyên biệt.
     const requestBody = {
       cao: parseFloat(measurements.height) || 0,
       nang: parseFloat(measurements.weight) || 0,
@@ -17,7 +21,6 @@ export const predictSizeWithGemini = async (
       mong: parseFloat(measurements.hips) || 0,
     };
 
-    // 2. Gọi API
     const response = await fetch(`${API_URL}/predict`, {
       method: 'POST',
       headers: {
@@ -32,25 +35,27 @@ export const predictSizeWithGemini = async (
 
     const data = await response.json();
     
-    // 3. Xử lý dữ liệu trả về từ API
-    // Giả định API trả về JSON có các trường như size, confidence, hoặc chỉ size.
-    // Map dữ liệu API về cấu trúc frontend cần.
     const suggestedSize = data.size || data.prediction || "M"; 
     const confidence = data.confidence ? parseFloat(data.confidence) : 95;
     const isAmbiguous = data.is_ambiguous || false;
     const alternativeSize = data.alt_size || data.alternative_size || undefined;
 
-    const resultStruct = {
-        suggestedSize,
-        alternativeSize,
-        isAmbiguous,
-        confidence
-    };
+    // 2. GỌI GEMINI API: Để sinh "Lời khuyên" và "Giải thích" (Creative Content)
+    let explanation = "";
+    let advice = "";
 
-    // 4. Tạo nội dung chữ (Explanation/Advice) tại Client
-    // Vì API model thường chỉ trả về kết quả dự đoán (Label), ta giữ lại hàm sinh text ở frontend để UI đẹp.
-    const explanation = getStaticExplanation(resultStruct, measurements, useFullModel);
-    const advice = getStaticAdvice(suggestedSize);
+    try {
+        // Cố gắng gọi Gemini để lấy nội dung xịn
+        const geminiContent = await generateStylistAdvice(measurements, suggestedSize, alternativeSize, isAmbiguous);
+        explanation = geminiContent.explanation;
+        advice = geminiContent.advice;
+    } catch (geminiError) {
+        console.warn("Gemini Error, falling back to static text:", geminiError);
+        // Fallback về text tĩnh nếu Gemini lỗi (hết quota, network...)
+        const resultStruct = { suggestedSize, alternativeSize, isAmbiguous, confidence };
+        explanation = getStaticExplanation(resultStruct, measurements, useFullModel);
+        advice = getStaticAdvice(suggestedSize);
+    }
 
     return {
       suggestedSize,
@@ -66,43 +71,86 @@ export const predictSizeWithGemini = async (
     return {
       suggestedSize: "Error", 
       confidence: 0,
-      explanation: "Không thể kết nối đến máy chủ dự đoán (API). Có thể server đang khởi động, vui lòng thử lại sau giây lát.",
+      explanation: "Không thể kết nối đến máy chủ dự đoán. Vui lòng thử lại sau giây lát.",
       advice: "Kiểm tra kết nối mạng của bạn.",
       isAmbiguous: false
     };
   }
 };
 
-// --- HELPER FUNCTIONS FOR STATIC TEXT ---
-// Giữ lại các hàm này để tạo nội dung hiển thị thân thiện với người dùng
+// --- GEMINI FUNCTION ---
+
+async function generateStylistAdvice(
+    measurements: BodyMeasurements, 
+    suggestedSize: string, 
+    alternativeSize: string | undefined, 
+    isAmbiguous: boolean
+): Promise<{ explanation: string; advice: string }> {
+
+    // Sử dụng model Flash cho phản hồi nhanh (low latency)
+    const modelId = "gemini-3-flash-preview"; 
+
+    // Xây dựng prompt chi tiết
+    const bodyInfo = `Cao ${measurements.height}cm, Nặng ${measurements.weight}kg` + 
+                     (measurements.bust ? `, Ngực ${measurements.bust}cm, Eo ${measurements.waist}cm, Mông ${measurements.hips}cm` : '');
+
+    const prompt = `
+    Bạn là một Stylist thời trang cao cấp của thương hiệu MAVO.
+    
+    Thông tin khách hàng: ${bodyInfo}
+    Kết quả đo size của hệ thống: Size ${suggestedSize} ${isAmbiguous ? `(Phân vân với size ${alternativeSize})` : ''}.
+
+    Nhiệm vụ: Hãy trả về JSON gồm 2 trường:
+    1. "explanation": Giải thích tại sao chọn size ${suggestedSize} cho body này một cách thuyết phục, ngắn gọn (dưới 40 từ). Nếu có phân vân size, hãy so sánh nhẹ.
+    2. "advice": Lời khuyên phối đồ (Outfit recommendation) phù hợp nhất với dáng người này (ví dụ: dáng gầy, dáng đậm, dáng chuẩn...) để họ tự tin hơn. Văn phong thân thiện, sành điệu (dưới 50 từ).
+    `;
+
+    const response = await ai.models.generateContent({
+        model: modelId,
+        contents: prompt,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    explanation: { type: Type.STRING },
+                    advice: { type: Type.STRING },
+                },
+                required: ["explanation", "advice"],
+            } as Schema,
+        }
+    });
+
+    const jsonText = response.text;
+    if (!jsonText) throw new Error("Empty response from Gemini");
+    
+    return JSON.parse(jsonText);
+}
+
+// --- STATIC FALLBACKS (Dự phòng) ---
 
 const getStaticExplanation = (result: any, measurements: BodyMeasurements, useFullModel: boolean) => {
     const h = measurements.height;
     const w = measurements.weight;
 
     if (result.isAmbiguous && result.alternativeSize) {
-        return `Dựa trên chiều cao ${h}cm và cân nặng ${w}kg, Server MAVO nhận thấy chỉ số của bạn nằm ở ngưỡng chuyển giao giữa size ${result.suggestedSize} và ${result.alternativeSize}. Hệ thống ưu tiên đề xuất size ${result.suggestedSize} để đảm bảo sự thoải mái. Tuy nhiên, nếu thích mặc ôm (Slim-fit), bạn có thể chọn ${result.alternativeSize}.`;
+        return `Với ${h}cm và ${w}kg, chỉ số của bạn nằm ở ngưỡng chuyển giao giữa size ${result.suggestedSize} và ${result.alternativeSize}. Hệ thống chọn ${result.suggestedSize} để thoải mái nhất.`;
     }
 
     let detailText = "";
     if (useFullModel) {
-        detailText = `kết hợp với số đo 3 vòng (${measurements.bust}-${measurements.waist}-${measurements.hips}), `;
+        detailText = `kết hợp số đo 3 vòng, `;
     }
 
-    return `Hệ thống AI MAVO đã phân tích dữ liệu: Cao ${h}cm, Nặng ${w}kg ${detailText}và xác định Size ${result.suggestedSize} là lựa chọn tối ưu nhất cho vóc dáng của bạn.`;
+    return `Hệ thống AI đã phân tích: Cao ${h}cm, Nặng ${w}kg ${detailText}và xác định Size ${result.suggestedSize} là tối ưu nhất.`;
 };
 
 const getStaticAdvice = (size: string) => {
     switch (size) {
-        case 'S':
-            return "Size S phù hợp với vóc dáng nhỏ nhắn. Hãy ưu tiên các mẫu áo sáng màu hoặc họa tiết kẻ ngang để tạo cảm giác đầy đặn hơn. Tránh đồ quá rộng (Oversize).";
-        case 'M':
-            return "Size M dành cho vóc dáng cân đối. Bạn có thể thoải mái thử nghiệm nhiều phong cách từ Slim-fit đến Regular-fit.";
-        case 'L':
-            return "Size L phù hợp với vóc dáng chuẩn. Các thiết kế tối giản, form dáng vừa vặn sẽ giúp tôn lên chiều cao và vẻ nam tính của bạn.";
-        case 'XL':
-            return "Size XL dành cho vóc dáng cao lớn hoặc đậm người. Hãy chọn trang phục vừa vặn, chất liệu đứng form nhưng co giãn tốt để luôn thoải mái.";
-        default:
-            return "Hãy chọn trang phục mang lại sự tự tin và thoải mái nhất cho bạn.";
+        case 'S': return "Dáng người nhỏ nhắn, hãy chọn áo sáng màu hoặc sọc ngang để trông đầy đặn hơn.";
+        case 'M': return "Vóc dáng cân đối, bạn phù hợp với hầu hết các form áo từ Slim-fit đến Regular.";
+        case 'L': return "Vóc dáng chuẩn, các thiết kế tối giản sẽ tôn lên chiều cao và vẻ nam tính của bạn.";
+        case 'XL': return "Với vóc dáng cao lớn, hãy chọn trang phục vừa vặn, chất liệu đứng form để thoải mái.";
+        default: return "Hãy chọn trang phục mang lại sự tự tin nhất cho bạn.";
     }
 };
