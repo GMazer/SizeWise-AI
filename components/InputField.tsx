@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { InputFieldProps } from '../types';
 import { ChevronUp, ChevronDown } from 'lucide-react';
@@ -10,6 +11,8 @@ export const InputField: React.FC<InputFieldProps> = ({
   placeholder,
   icon,
   onChange,
+  nextField,
+  onPaste,
 }) => {
   
   const handleIncrement = () => {
@@ -21,6 +24,22 @@ export const InputField: React.FC<InputFieldProps> = ({
     const currentVal = parseFloat(value) || 0;
     if (currentVal > 0) {
       onChange(id, (currentVal - 1).toString());
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (nextField) {
+        const nextElement = document.getElementById(nextField);
+        if (nextElement) {
+          nextElement.focus();
+        }
+      } else {
+        // If no next field, blur the current one to hide keyboard on mobile
+        // or just let default behavior happen
+        e.currentTarget.blur();
+      }
     }
   };
 
@@ -44,6 +63,8 @@ export const InputField: React.FC<InputFieldProps> = ({
           placeholder={placeholder}
           value={value}
           onChange={(e) => onChange(id, e.target.value)}
+          onKeyDown={handleKeyDown}
+          onPaste={onPaste}
         />
 
         {/* Đơn vị hiển thị bên trong input */}

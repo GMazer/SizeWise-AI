@@ -144,6 +144,38 @@ const App: React.FC = () => {
     }
   };
 
+  // --- MAGIC PASTE FEATURE ---
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    // Lấy nội dung từ clipboard
+    const clipboardData = e.clipboardData.getData('text');
+    
+    // Sử dụng Regex để tìm các số (nguyên hoặc thập phân) trong chuỗi
+    // Ví dụ: "1m65 55kg" -> ["1", "65", "55"] => Cần regex thông minh hơn hoặc logic xử lý đơn giản
+    // Logic đơn giản: Lấy tất cả các cụm số, bỏ qua các ký tự không phải số
+    // Hỗ trợ số thập phân với dấu chấm
+    const numbers = clipboardData.match(/(\d+(\.\d+)?)/g);
+
+    if (numbers && numbers.length >= 2) {
+      e.preventDefault(); // Ngăn hành vi paste mặc định (tránh paste cả chuỗi dài vào 1 ô)
+      
+      // Map theo thứ tự: Height -> Weight -> Bust -> Waist -> Hips
+      // Nếu số đo quá nhỏ (ví dụ < 3 cho chiều cao mét), có thể cần logic chuẩn hóa (nhưng ở đây giữ nguyên)
+      
+      const newMeasurements = { ...measurements };
+      const fields: (keyof BodyMeasurements)[] = ['height', 'weight', 'bust', 'waist', 'hips'];
+
+      numbers.forEach((num, index) => {
+        if (index < fields.length) {
+          newMeasurements[fields[index]] = num;
+        }
+      });
+
+      setMeasurements(newMeasurements);
+      showNotification(`Đã tự động điền ${Math.min(numbers.length, 5)} chỉ số từ bộ nhớ đệm`, 'success');
+    }
+    // Nếu chỉ có 1 số, để trình duyệt xử lý paste bình thường vào ô đó
+  };
+
   const handlePredict = async () => {
     if (!measurements.height || !measurements.weight) {
       showNotification("Vui lòng nhập Chiều cao và Cân nặng!", 'error');
@@ -293,6 +325,8 @@ const App: React.FC = () => {
                 value={measurements.height}
                 onChange={handleInputChange}
                 icon={<Ruler className="w-4 h-4" />}
+                nextField="weight"
+                onPaste={handlePaste}
               />
               <InputField
                 id="weight"
@@ -302,6 +336,8 @@ const App: React.FC = () => {
                 value={measurements.weight}
                 onChange={handleInputChange}
                 icon={<Weight className="w-4 h-4" />}
+                nextField="bust"
+                onPaste={handlePaste}
               />
             </div>
 
@@ -324,6 +360,8 @@ const App: React.FC = () => {
                     placeholder="85"
                     value={measurements.bust}
                     onChange={handleInputChange}
+                    nextField="waist"
+                    onPaste={handlePaste}
                   />
                   <InputField
                     id="waist"
@@ -332,6 +370,8 @@ const App: React.FC = () => {
                     placeholder="68"
                     value={measurements.waist}
                     onChange={handleInputChange}
+                    nextField="hips"
+                    onPaste={handlePaste}
                   />
                   <InputField
                     id="hips"
@@ -340,21 +380,24 @@ const App: React.FC = () => {
                     placeholder="92"
                     value={measurements.hips}
                     onChange={handleInputChange}
+                    nextField="predict-btn"
+                    onPaste={handlePaste}
                   />
                 </div>
                 <div className="mt-4 flex items-start gap-2">
                     <Sparkles className="w-3 h-3 text-indigo-500 dark:text-indigo-400 mt-0.5 shrink-0" />
                     <p className="text-xs text-gray-500 dark:text-gray-400 leading-tight transition-colors">
-                        Nếu điền, vui lòng <strong>điền đủ cả 3 ô</strong> để kích hoạt AI Chuyên sâu với độ chính xác cao hơn.
+                        Mẹo: Bạn có thể copy một dãy số (ví dụ: "1m65 55kg 85 68 92") và dán vào bất kỳ ô nào để điền nhanh!
                     </p>
                 </div>
             </div>
 
             <div className="mt-8">
               <button
+                id="predict-btn"
                 onClick={handlePredict}
                 disabled={loading}
-                className="w-full flex items-center justify-center gap-2 text-white font-bold text-lg py-4 px-6 rounded-xl shadow-lg shadow-indigo-200 dark:shadow-indigo-900/30 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 dark:from-indigo-600 dark:to-indigo-800 transition-all duration-200 transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
+                className="w-full flex items-center justify-center gap-2 text-white font-bold text-lg py-4 px-6 rounded-xl shadow-lg shadow-indigo-200 dark:shadow-indigo-900/30 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 dark:from-indigo-600 dark:to-indigo-800 transition-all duration-200 transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none focus:ring-4 focus:ring-indigo-500/30 outline-none"
               >
                 {loading ? (
                   <>

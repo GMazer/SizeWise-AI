@@ -34,4 +34,6 @@ export interface InputFieldProps {
   placeholder: string;
   icon?: React.ReactNode;
   onChange: (id: keyof BodyMeasurements, value: string) => void;
+  nextField?: string;
+  onPaste?: (e: React.ClipboardEvent<HTMLInputElement>) => void;
 }
