@@ -182,18 +182,11 @@ const App: React.FC = () => {
       return;
     }
 
-    const hasAny3Vong = measurements.bust || measurements.waist || measurements.hips;
-    const hasAll3Vong = measurements.bust && measurements.waist && measurements.hips;
-
-    if (hasAny3Vong && !hasAll3Vong) {
-      showNotification(
-        "Nếu bạn nhập số đo 3 vòng, vui lòng nhập đầy đủ cả 3 (Ngực, Eo, Mông) để có kết quả chính xác, hoặc để trống tất cả.",
-        'warning'
-      );
-      return;
-    }
-
-    const useFullModel = !!hasAll3Vong;
+    // Logic cũ bắt buộc nhập đủ 3 vòng đã được xóa bỏ theo yêu cầu mới
+    // API backend mới chấp nhận các giá trị null
+    
+    // Xác định xem có dùng model full (có ít nhất 1 số đo phụ) hay không để hiển thị UI
+    const useFullModel = !!(measurements.bust || measurements.waist || measurements.hips);
 
     setLoading(true);
     setPrediction(null);
@@ -387,7 +380,7 @@ const App: React.FC = () => {
                 <div className="mt-4 flex items-start gap-2">
                     <Sparkles className="w-3 h-3 text-indigo-500 dark:text-indigo-400 mt-0.5 shrink-0" />
                     <p className="text-xs text-gray-500 dark:text-gray-400 leading-tight transition-colors">
-                        Mẹo: Bạn có thể copy một dãy số (ví dụ: "1m65 55kg 85 68 92") và dán vào bất kỳ ô nào để điền nhanh!
+                        Mẹo: Bạn có thể nhập 1 trong 3 vòng hoặc để trống. Copy chuỗi số (ví dụ: "1m65 55kg 85") và dán để điền nhanh!
                     </p>
                 </div>
             </div>
@@ -442,7 +435,7 @@ const App: React.FC = () => {
                  <div className="p-6 sm:p-8 flex-1 flex flex-col">
                     <div className="flex items-center justify-center gap-2 mb-6">
                        <span className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full border border-indigo-100 dark:border-indigo-800 transition-colors">
-                          {measurements.bust ? 'AI Mode: Chuyên sâu' : 'AI Mode: Cơ bản'}
+                          AI Mode: Tự động
                        </span>
                     </div>
 
@@ -481,7 +474,7 @@ const App: React.FC = () => {
                            
                            <div className="mt-4 text-center">
                               <span className="text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 px-3 py-1 rounded-lg">
-                                Độ tin cậy: <span className="text-gray-800 dark:text-white font-bold">{Math.round(prediction.confidence)}%</span>
+                                Độ tin cậy: <span className={`${prediction.confidence < 80 ? 'text-orange-600 dark:text-orange-400' : 'text-gray-800 dark:text-white'} font-bold`}>{Math.round(prediction.confidence)}%</span>
                               </span>
                            </div>
                         </div>
@@ -491,7 +484,7 @@ const App: React.FC = () => {
                              <div className={`text-white ${getSizeFontSize(prediction.suggestedSize)} font-black rounded-3xl w-36 h-36 flex items-center justify-center shadow-xl shadow-indigo-200 dark:shadow-indigo-900/40 bg-gradient-to-br from-indigo-600 to-purple-600 mx-auto transform transition-transform hover:scale-105 duration-300 overflow-hidden px-2 break-words`}>
                                {prediction.suggestedSize}
                              </div>
-                             <div className="absolute -bottom-3 left-1/2 transform -translate-x-1/2 bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 text-xs font-bold px-3 py-1 rounded-full shadow-md border border-indigo-50 dark:border-gray-700 whitespace-nowrap transition-colors">
+                             <div className={`absolute -bottom-3 left-1/2 transform -translate-x-1/2 bg-white dark:bg-gray-800 text-xs font-bold px-3 py-1 rounded-full shadow-md border whitespace-nowrap transition-colors ${prediction.confidence < 80 ? 'text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800' : 'text-indigo-600 dark:text-indigo-400 border-indigo-50 dark:border-gray-700'}`}>
                                 Độ tin cậy {Math.round(prediction.confidence)}%
                              </div>
                            </div>
